@@ -23,7 +23,7 @@ import (
 	"github.com/pajarori/pierx/pkg/config"
 )
 
-var version = "0.1.1"
+var version = "0.1.2"
 var silent bool
 
 func Execute() error {

@@ -330,7 +330,7 @@ func (m Model) renderHeader() string {
 	meta := []string{version, "", tunnel, local, mode, access, status, latency, requests}
 
 	if m.info.PubAddr != "" {
-		meta = append(meta, labelStyle.Render("Public UDP")+valueStyle.Render(m.info.PubAddr))
+		meta = append(meta, labelStyle.Render("Pub UDP")+valueStyle.Render(m.info.PubAddr))
 	}
 
 	content := lipgloss.JoinHorizontal(lipgloss.Top,
