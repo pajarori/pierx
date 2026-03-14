@@ -18,7 +18,7 @@ Tunnel direct. No relay. No limits.
 ## Installation
 
 ```bash
-go install github.com/pajarori/pierx@latest
+go install github.com/pajarori/pierx@main
 ```
 
 or download from [releases](https://github.com/pajarori/pierx/releases).
