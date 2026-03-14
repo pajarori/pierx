@@ -21,7 +21,7 @@ import (
 	"github.com/pajarori/pierx/pkg/config"
 )
 
-var version = "0.1.0"
+var version = "0.1.1"
 
 func Execute() error {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
