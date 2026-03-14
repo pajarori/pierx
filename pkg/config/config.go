@@ -1,11 +1,6 @@
 package config
 
-import (
-	"fmt"
-	"os"
-
-	"gopkg.in/yaml.v3"
-)
+import "fmt"
 
 type ClientConfig struct {
 	ServerAddr string   `yaml:"server_addr"`
@@ -29,20 +24,8 @@ func DefaultClientConfig() *ClientConfig {
 		LocalPort:  3000,
 		TunnelType: TunnelHTTP,
 		STUNAddr:   DefaultDomain + ":3478",
-		SignalAddr: "wss://" + DefaultDomain + ":7000",
+		SignalAddr: "ws://" + DefaultDomain + ":7000",
 	}
-}
-
-func LoadClientConfig(path string) (*ClientConfig, error) {
-	cfg := DefaultClientConfig()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
-	}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
-	}
-	return cfg, nil
 }
 
 func ValidateClientConfig(cfg *ClientConfig) error {

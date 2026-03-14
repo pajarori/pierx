@@ -100,18 +100,3 @@ func statusCodeStyle(code int) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
 	}
 }
-
-func methodStyle(method string) lipgloss.Style {
-	switch method {
-	case "GET":
-		return lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
-	case "POST":
-		return lipgloss.NewStyle().Foreground(colorBlue).Bold(true)
-	case "PUT", "PATCH":
-		return lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
-	case "DELETE":
-		return lipgloss.NewStyle().Foreground(colorRed).Bold(true)
-	default:
-		return lipgloss.NewStyle().Foreground(colorFg).Bold(true)
-	}
-}

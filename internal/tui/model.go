@@ -435,10 +435,3 @@ func formatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

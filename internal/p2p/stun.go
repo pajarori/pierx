@@ -1,14 +1,11 @@
 package p2p
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"net"
 	"time"
-
-	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -18,106 +15,6 @@ const (
 	stunHeaderSize      = 20
 	attrXORMappedAddr   = 0x0020
 )
-
-type STUNServer struct {
-	addr string
-	conn *net.UDPConn
-}
-
-func NewSTUNServer(addr string) *STUNServer {
-	return &STUNServer{addr: addr}
-}
-
-func (s *STUNServer) ListenAndServe(ctx context.Context) error {
-	udpAddr, err := net.ResolveUDPAddr("udp4", s.addr)
-	if err != nil {
-		return fmt.Errorf("resolve stun addr: %w", err)
-	}
-	conn, err := net.ListenUDP("udp4", udpAddr)
-	if err != nil {
-		return fmt.Errorf("listen stun: %w", err)
-	}
-	s.conn = conn
-	log.Info().Str("addr", s.addr).Msg("STUN server listening")
-
-	go func() {
-		<-ctx.Done()
-		conn.Close()
-	}()
-
-	buf := make([]byte, 1024)
-	for {
-		n, remoteAddr, err := conn.ReadFromUDP(buf)
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				return nil
-			default:
-				log.Error().Err(err).Msg("stun read error")
-				continue
-			}
-		}
-		if n < stunHeaderSize {
-			continue
-		}
-		pkt := make([]byte, n)
-		copy(pkt, buf[:n])
-		go s.handlePacket(pkt, remoteAddr)
-	}
-}
-
-func (s *STUNServer) handlePacket(data []byte, remote *net.UDPAddr) {
-	msgType := binary.BigEndian.Uint16(data[0:2])
-	if msgType != stunBindingRequest {
-		return
-	}
-	cookie := binary.BigEndian.Uint32(data[4:8])
-	if cookie != stunMagicCookie {
-		return
-	}
-
-	txnID := data[8:20]
-	resp := buildBindingResponse(txnID, remote)
-
-	if _, err := s.conn.WriteToUDP(resp, remote); err != nil {
-		log.Error().Err(err).Msg("stun write error")
-	}
-	log.Debug().Str("remote", remote.String()).Msg("stun binding response sent")
-}
-
-func buildBindingResponse(txnID []byte, addr *net.UDPAddr) []byte {
-	ip := addr.IP.To4()
-	if ip == nil {
-		ip = addr.IP.To16()
-	}
-
-	attrValue := make([]byte, 8)
-	attrValue[0] = 0x00
-	attrValue[1] = 0x01
-
-	xorPort := uint16(addr.Port) ^ uint16(stunMagicCookie>>16)
-	binary.BigEndian.PutUint16(attrValue[2:4], xorPort)
-
-	magicBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(magicBytes, stunMagicCookie)
-	for i := 0; i < 4; i++ {
-		attrValue[4+i] = ip[i] ^ magicBytes[i]
-	}
-
-	attr := make([]byte, 4+len(attrValue))
-	binary.BigEndian.PutUint16(attr[0:2], attrXORMappedAddr)
-	binary.BigEndian.PutUint16(attr[2:4], uint16(len(attrValue)))
-	copy(attr[4:], attrValue)
-
-	resp := make([]byte, stunHeaderSize+len(attr))
-	binary.BigEndian.PutUint16(resp[0:2], stunBindingResponse)
-	binary.BigEndian.PutUint16(resp[2:4], uint16(len(attr)))
-	binary.BigEndian.PutUint32(resp[4:8], stunMagicCookie)
-	copy(resp[8:20], txnID)
-	copy(resp[20:], attr)
-
-	return resp
-}
 
 func DiscoverPublicAddr(stunServer string) (string, error) {
 	raddr, err := net.ResolveUDPAddr("udp4", stunServer)

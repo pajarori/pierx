@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
+	"github.com/pajarori/pierx/internal/p2p"
 	"github.com/rs/zerolog/log"
 )
 
@@ -21,11 +22,13 @@ type Client struct {
 	serverAddr string
 	localPort  int
 	pubAddr    string
+	signalAddr string
 	typeName   string
 	tcpAllow   []string
 
 	conn       net.Conn
 	muxSession *yamux.Session
+	muxMu      sync.Mutex
 	ctx        context.Context
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
@@ -59,7 +62,7 @@ type StateEvent struct {
 	Latency string
 }
 
-func NewClient(serverAddr string, localPort int, pubAddr, typeName string, tcpAllow []string) *Client {
+func NewClient(serverAddr string, localPort int, pubAddr, signalAddr, typeName string, tcpAllow []string) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	if typeName == "" {
 		typeName = "http"
@@ -68,6 +71,7 @@ func NewClient(serverAddr string, localPort int, pubAddr, typeName string, tcpAl
 		serverAddr: serverAddr,
 		localPort:  localPort,
 		pubAddr:    pubAddr,
+		signalAddr: signalAddr,
 		typeName:   typeName,
 		tcpAllow:   append([]string(nil), tcpAllow...),
 		ctx:        ctx,
@@ -133,6 +137,7 @@ func (c *Client) RunWithRetry(ctx context.Context, onConnect func(*RegistrationR
 			onConnect(resp)
 		}
 		go c.heartbeat(ctx)
+		go c.runP2P(ctx)
 
 		err = c.Serve(ctx)
 		c.closeActive()
@@ -164,7 +169,9 @@ func (c *Client) heartbeat(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			c.muxMu.Lock()
 			mux := c.muxSession
+			c.muxMu.Unlock()
 			if mux == nil {
 				return
 			}
@@ -244,7 +251,9 @@ func (c *Client) connectOnce() (*RegistrationResp, error) {
 		conn.Close()
 		return nil, fmt.Errorf("yamux client setup: %w", err)
 	}
+	c.muxMu.Lock()
 	c.muxSession = muxSession
+	c.muxMu.Unlock()
 
 	log.Info().
 		Str("subdomain", c.Assigned).
@@ -489,6 +498,41 @@ func formatLatency(d time.Duration) string {
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
+func (c *Client) runP2P(ctx context.Context) {
+	if c.pubAddr == "" || c.signalAddr == "" {
+		return
+	}
+
+	sc := p2p.NewSignalClient(c.signalAddr, c.Assigned, c.pubAddr)
+	defer sc.Close()
+
+	go sc.Run(ctx)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case req := <-sc.PunchRequests():
+			log.Info().Str("remote", req.PubAddr).Str("session", req.SessionID).Msg("attempting UDP hole-punch")
+			result, err := p2p.Punch(ctx, 0, req.PubAddr, req.SessionID, 10*time.Second)
+			if err != nil {
+				log.Warn().Err(err).Msg("punch error")
+				continue
+			}
+			if result.Success {
+				c.emitState("p2p", nil)
+				log.Info().
+					Str("local", result.LocalAddr.String()).
+					Str("remote", result.RemoteAddr.String()).
+					Msg("P2P hole-punch succeeded, direct connection available")
+				result.Conn.Close()
+			} else {
+				log.Info().Msg("punch failed, continuing in relay mode")
+			}
+		}
+	}
+}
+
 func (c *Client) Close() {
 	c.cancel()
 	c.closeActive()
@@ -496,13 +540,17 @@ func (c *Client) Close() {
 }
 
 func (c *Client) closeActive() {
-	if c.muxSession != nil {
-		c.muxSession.Close()
-		c.muxSession = nil
+	c.muxMu.Lock()
+	mux := c.muxSession
+	c.muxSession = nil
+	conn := c.conn
+	c.conn = nil
+	c.muxMu.Unlock()
+	if mux != nil {
+		mux.Close()
 	}
-	if c.conn != nil {
-		c.conn.Close()
-		c.conn = nil
+	if conn != nil {
+		conn.Close()
 	}
 	c.wg.Wait()
 }

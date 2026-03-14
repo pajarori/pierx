@@ -114,7 +114,7 @@ func setupClient(cfg *config.ClientConfig) (*tunnel.Client, *web.Inspector, stri
 		}
 	}
 
-	client := tunnel.NewClient(cfg.ServerAddr, cfg.LocalPort, pubAddr, cfg.TunnelType, cfg.TCPAllow)
+	client := tunnel.NewClient(cfg.ServerAddr, cfg.LocalPort, pubAddr, cfg.SignalAddr, cfg.TunnelType, cfg.TCPAllow)
 	ins := web.NewInspector()
 	client.OnRequest = func(ev tunnel.RequestEvent) {
 		mode := "relay"
