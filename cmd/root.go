@@ -6,8 +6,10 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rs/zerolog"
@@ -22,6 +24,7 @@ import (
 )
 
 var version = "0.1.1"
+var silent bool
 
 func Execute() error {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -33,6 +36,7 @@ func Execute() error {
 		Example: "  pierx http 3000\n" +
 			"  pierx tcp 22",
 	}
+	rootCmd.PersistentFlags().BoolVar(&silent, "silent", false, "Run without any output")
 
 	rootCmd.AddCommand(httpCmd())
 	rootCmd.AddCommand(tcpCmd())
@@ -70,6 +74,9 @@ func newClientCmd(use, short, example string) *cobra.Command {
 			cfg.TunnelType = strings.Fields(use)[0]
 			if err := applyClientArgs(cfg, args); err != nil {
 				return err
+			}
+			if silent {
+				return runClientSilent(cfg)
 			}
 			return runClientTUI(cfg)
 		},
@@ -223,6 +230,22 @@ func runClientTUI(cfg *config.ClientConfig) error {
 
 	cancel()
 	return nil
+}
+
+func runClientSilent(cfg *config.ClientConfig) error {
+	client, _, _, err := setupClient(cfg)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	restoreLogs := silenceLogs()
+	defer restoreLogs()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	return client.RunWithRetry(ctx, nil)
 }
 
 func silenceLogs() func() {
