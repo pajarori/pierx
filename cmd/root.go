@@ -8,7 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rs/zerolog"
@@ -97,9 +96,6 @@ func setupClient(cfg *config.ClientConfig) (*tunnel.Client, *web.Inspector, stri
 	if err := config.ValidateClientConfig(cfg); err != nil {
 		return nil, nil, "", err
 	}
-	if err := validateLocalTarget(cfg.LocalPort); err != nil {
-		return nil, nil, "", err
-	}
 
 	var pubAddr string
 	if cfg.STUNAddr != "" {
@@ -141,16 +137,6 @@ func buildTunnelURL(cfg *config.ClientConfig, subdomain string) string {
 	serverHost := serverHost(cfg.ServerAddr)
 	return fmt.Sprintf("https://%s.%s", subdomain, serverHost)
 }
-
-func validateLocalTarget(port int) error {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 2*time.Second)
-	if err != nil {
-		return fmt.Errorf("local service on port %d is unavailable: %w", port, err)
-	}
-	conn.Close()
-	return nil
-}
-
 func serverHost(addr string) string {
 	host, _, err := net.SplitHostPort(addr)
 	if err == nil {
